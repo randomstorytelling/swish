@@ -353,7 +353,8 @@ function renderAnalysis(report) {
   el.scoreVal.textContent = report.overall;
   el.scoreGrade.textContent = report.grade;
   const dialed = report.metrics.filter(m => m.status === "good").length;
-  el.scoreSummary.textContent = `${report.hand} hand · ${report.view}-on · ${dialed}/${report.metrics.length} dialed in`;
+  const viewLabel = report.view === "45" ? "45°" : `${report.view}-on`;
+  el.scoreSummary.textContent = `${report.hand} hand · ${viewLabel} · ${dialed}/${report.metrics.length} dialed in`;
 
   // coach card — persona voice + an attributed cue from a world-class coach
   const persona = getPersona(state.settings.coach);
@@ -362,6 +363,7 @@ function renderAnalysis(report) {
   const top = report.topFixes[0];
   const ec = top ? coachCue(top.key, persona.id) : null;
   let html = `<span class="coach-byline">${persona.name} · channeling ${persona.coach}</span>`;
+  if (!report.legsSeen) html += `<span class="legs-note">📷 Only your upper body was in frame — I scored that. Back up next time to add your legs &amp; balance.</span>`;
   html += mdBold(report.summary);
   if (ec) html += `<span class="metric-attrib"><b>${ec.coach}:</b> “${ec.cue}”</span>`;
   el.coachText.innerHTML = html;

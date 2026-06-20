@@ -4,7 +4,7 @@ const K_SETTINGS = "swish.settings.v1";
 
 const DEFAULT_SETTINGS = {
   hand: "auto",
-  angle: "side",
+  angle: "auto",
   voice: true,
   liveSkel: true,
   model: "full",

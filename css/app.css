@@ -231,6 +231,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
 
 /* coach card byline */
 .coach-byline{font-size:11px;color:var(--muted);font-weight:650;margin-bottom:3px;text-transform:uppercase;letter-spacing:.6px}
+.legs-note{display:block;margin-bottom:8px;padding:8px 10px;border-radius:10px;background:rgba(255,207,92,.12);color:var(--warn);font-size:12.5px;line-height:1.4}
 
 /* "trained on the greats" strip in Drills */
 .brain-card{margin:4px 18px 8px;background:linear-gradient(135deg,var(--card),var(--card-2));border:1px solid var(--line);border-radius:18px;padding:16px}

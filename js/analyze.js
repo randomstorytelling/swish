@@ -79,6 +79,25 @@ function detectHand(frames, setting) {
   return rMin <= lMin ? "right" : "left";
 }
 
+/* ---------------- camera-angle auto-detect (3D shoulder line) ---------------- */
+// front-on: shoulders spread horizontally (world x); side-on: spread in depth (world z).
+function detectView(frames) {
+  let sx = 0, sz = 0, n = 0;
+  for (const f of frames) {
+    const L = f.world?.[LM.L_SHO], R = f.world?.[LM.R_SHO];
+    const lv = f.lm?.[LM.L_SHO]?.v, rv = f.lm?.[LM.R_SHO]?.v;
+    if (L && R && (lv == null || lv >= VIS) && (rv == null || rv >= VIS)) {
+      sx += Math.abs(R.x - L.x); sz += Math.abs(R.z - L.z); n++;
+    }
+  }
+  if (n < 3) return null;
+  const ax = sx / n, az = sz / n;
+  const ratio = ax / (Math.hypot(ax, az) || 1e-6);   // ~1 = front, ~0 = side
+  if (ratio > 0.72) return "front";
+  if (ratio < 0.40) return "side";
+  return "45";
+}
+
 /* ================= THE RUBRIC =================
    Research-backed bands. tol = units beyond a band edge that map to score 0.
    views = reliability weight by camera angle (honest confidence). */
@@ -195,7 +214,8 @@ function detectPhases(frames, hand) {
 
 /* ================= main ================= */
 export function analyzeShot(frames, opts = {}) {
-  const view = opts.view || "side";
+  let view = opts.view || "side";
+  if (view === "auto") view = detectView(frames) || "side";
   const valid = frames.filter(f => f.lm);
   if (valid.length < 6)
     return { ok: false, reason: "I couldn't see a full body clearly. Get your whole body in frame, well lit, and try again." };
@@ -303,8 +323,9 @@ export function analyzeShot(frames, opts = {}) {
   const grade = overall >= 90 ? "Elite stroke" : overall >= 80 ? "Smooth shot"
     : overall >= 68 ? "Solid base" : overall >= 55 ? "Coming along" : "Let's build it";
 
+  const legsSeen = metrics.some(m => m.key === "kneeLoad" || m.key === "base");
   return {
-    ok: true, overall, grade, hand, view,
+    ok: true, overall, grade, hand, view, legsSeen,
     summary: buildSummary(overall, topFixes, metrics),
     phases: { dipIdx, setIdx, releaseIdx, followIdx },
     phaseTimes: { dip: dip.t, set: set.t, release: rel.t, follow: fol.t },
