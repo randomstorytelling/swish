@@ -39,12 +39,18 @@
       <div class="cam-placeholder" id="camPlaceholder">
         <div class="ball-spin"></div>
         <h2>Let's get your shot on film</h2>
-        <p class="muted">Prop your phone so your <strong>whole body and the rim</strong> are in frame — side-on or 45° is best. Then hit record and take your shots.</p>
+        <p class="muted">Prop the phone back far enough to see your <strong>whole body, head to feet</strong> (and the rim if you can). Side-on is best for arc; front-on is great for your elbow — set the angle in Settings. I'll tell you live when I've got you.</p>
         <button class="btn primary big" id="enableCamBtn">Turn on camera</button>
         <p class="tiny muted">Everything is processed on your phone. Nothing is uploaded.</p>
       </div>
 
-      <!-- live HUD while recording -->
+      <!-- live framing assistant (shows once the camera is on) -->
+      <div class="live-hud" id="liveHud" hidden>
+        <span class="live-dot" id="liveDot"></span>
+        <span id="liveStatus">loading coach…</span>
+      </div>
+
+      <!-- HUD while recording -->
       <div class="rec-hud" id="recHud" hidden>
         <span class="rec-dot"></span>
         <span id="recTimer">0.0s</span>

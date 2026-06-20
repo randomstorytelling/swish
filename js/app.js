@@ -40,6 +40,9 @@ const el = {
   flipCamBtn: $("#flipCamBtn"),
   uploadBtn: $("#uploadBtn"),
   fileInput: $("#fileInput"),
+  liveHud: $("#liveHud"),
+  liveStatus: $("#liveStatus"),
+  liveDot: $("#liveDot"),
   recHud: $("#recHud"),
   recTimer: $("#recTimer"),
   poseStatus: $("#poseStatus"),
@@ -88,6 +91,8 @@ const el = {
 function switchView(name) {
   el.views.forEach(v => v.hidden = v.dataset.view !== name);
   el.tabs.forEach(t => t.classList.toggle("active", t.dataset.view === name));
+  if (name === "shoot" && state.stream && !state.recording) { el.liveHud.hidden = false; startLiveTracking(); }
+  else if (name !== "shoot") stopLiveTracking();
   if (name === "progress") renderProgress();
   if (name === "drills") renderDrills();
   if (name === "analysis" && state.report) drawReviewAt(el.reviewVideo.currentTime || 0);
@@ -113,7 +118,10 @@ async function enableCamera() {
   el.camPlaceholder.hidden = true;
   el.shootControls.hidden = false;
   el.frameGuide.hidden = false;
-  warmPose();
+  el.liveHud.hidden = false;
+  setLiveStatus("searching", "loading coach…");
+  await warmPose();
+  startLiveTracking();
 }
 el.enableCamBtn.addEventListener("click", enableCamera);
 
@@ -144,34 +152,61 @@ el.flipCamBtn.addEventListener("click", async () => {
 });
 
 async function warmPose() {
-  if (state.poseWarm) return;
+  if (state.poseWarm) return true;
   try {
     el.poseStatus.textContent = "loading coach…";
     await pose.initPose({ runningMode: "VIDEO", model: state.settings.model });
     state.poseWarm = true;
     el.poseStatus.textContent = "ready";
-  } catch (e) { console.warn("pose warm failed", e); }
+    return true;
+  } catch (e) {
+    console.warn("pose warm failed", e);
+    setLiveStatus("warn", "Couldn't load the coach — check your connection, then reopen.");
+    return false;
+  }
 }
 
-/* ----------------- live skeleton (optional, during record) ----------------- */
-function startLiveLoop() {
-  if (!state.settings.liveSkel || !state.poseWarm) return;
+/* ----------------- live tracking + framing assistant ----------------- */
+function setLiveStatus(cls, txt) {
+  el.liveStatus.textContent = txt;
+  el.liveHud.className = "live-hud " + cls;
+}
+function startLiveTracking() {
+  if (state.liveRAF || !state.stream) return;
   const loop = () => {
-    if (!state.recording) return;
-    try {
-      const res = pose.detectVideo(el.camFeed, performance.now());
-      const lm = res?.landmarks?.[0] || null;
-      drawSkeleton(el.overlay, el.camFeed, lm, "cover");
-      if (lm) el.poseStatus.textContent = "tracking ✓";
-    } catch {}
     state.liveRAF = requestAnimationFrame(loop);
+    const now = performance.now();
+    if (now - (state._lastDet || 0) < 40) return;      // ~25fps cap (plenty for framing)
+    state._lastDet = now;
+    if (!state.stream || el.camFeed.readyState < 2) return;
+    let lm = null;
+    if (state.poseWarm) { try { lm = pose.detectVideo(el.camFeed, now)?.landmarks?.[0] || null; } catch {} }
+    drawSkeleton(el.overlay, el.camFeed, lm, "cover", state.liveHand);
+    if (!state.recording) updateFraming(lm);
   };
   state.liveRAF = requestAnimationFrame(loop);
 }
-function stopLiveLoop() {
+function stopLiveTracking() {
   if (state.liveRAF) cancelAnimationFrame(state.liveRAF);
   state.liveRAF = null;
   clearCanvas(el.overlay);
+}
+function visOK(lm, i) { const p = lm[i]; return p && (p.visibility == null || p.visibility >= 0.5); }
+function updateFraming(lm) {
+  if (!state.poseWarm) { setLiveStatus("searching", "loading coach…"); return; }
+  if (!lm) { setLiveStatus("searching", "Looking for you — step into the frame, good light"); return; }
+  const head = visOK(lm, 0);
+  const hips = visOK(lm, 23) || visOK(lm, 24);
+  const feet = visOK(lm, 27) || visOK(lm, 28) || visOK(lm, 31) || visOK(lm, 32);
+  const arm = (visOK(lm, 13) && visOK(lm, 15)) || (visOK(lm, 14) && visOK(lm, 16));
+  const lw = lm[15], rw = lm[16];
+  if (lw && rw && (lw.visibility ?? 1) > .3 && (rw.visibility ?? 1) > .3)
+    state.liveHand = (rw.y < lw.y) ? "right" : "left";
+  const hand = state.liveHand ? ` · ${state.liveHand}-handed` : "";
+  if (head && hips && feet) setLiveStatus("ok", `✓ Got your whole body${hand} — record when ready`);
+  else if ((arm || hips) && !feet) setLiveStatus("warn", "Back up so I can see your feet 👟");
+  else if (!head) setLiveStatus("warn", "Step back — I need your head in frame too");
+  else setLiveStatus("warn", "Get your whole body in the frame");
 }
 
 /* ----------------- record ----------------- */
@@ -204,8 +239,10 @@ async function toggleRecord() {
 
   state.recording = true;
   el.recordBtn.classList.add("recording");
+  el.liveHud.hidden = true;            // recHud takes over while recording
   el.recHud.hidden = false;
-  el.poseStatus.textContent = "finding you…";
+  el.poseStatus.textContent = "recording…";
+  startLiveTracking();                 // ensure the skeleton keeps drawing (idempotent)
   const t0 = performance.now();
   el.recTimer.textContent = "0.0s";
   state.recTimer = setInterval(() => {
@@ -213,7 +250,6 @@ async function toggleRecord() {
     el.recTimer.textContent = s.toFixed(1) + "s";
     if (s >= 12) stopRecord();         // safety auto-stop
   }, 100);
-  startLiveLoop();
 }
 
 function stopRecord() {
@@ -222,12 +258,11 @@ function stopRecord() {
   clearInterval(state.recTimer);
   el.recordBtn.classList.remove("recording");
   el.recHud.hidden = true;
-  stopLiveLoop();
   try { state.recorder.stop(); } catch {}
 }
 
 async function onRecordStop() {
-  if (!state.chunks.length) { toast("Hmm, that clip was empty. Try again."); return; }
+  if (!state.chunks.length) { toast("That clip came back empty — try recording again."); el.liveHud.hidden = false; return; }
   const blob = new Blob(state.chunks, { type: state.recorder.mimeType || "video/mp4" });
   state.chunks = [];
   loadClipForReview(blob);
@@ -243,6 +278,8 @@ el.fileInput.addEventListener("change", () => {
 
 /* ----------------- analysis pipeline ----------------- */
 async function loadClipForReview(blobOrFile) {
+  stopLiveTracking();                  // free the landmarker for the clip analysis
+  el.liveHud.hidden = true;
   if (state.reviewURL) { URL.revokeObjectURL(state.reviewURL); state.reviewURL = null; }
   state.reviewURL = URL.createObjectURL(blobOrFile);
   el.reviewVideo.muted = true; el.reviewVideo.playsInline = true;
@@ -268,7 +305,7 @@ async function loadClipForReview(blobOrFile) {
     state.report = report;
     showAnalyzing(false);
 
-    if (!report.ok) { toast(report.reason, 4200); return; }
+    if (!report.ok) { toast(report.reason, 4600); backToShootLive(); return; }
     // only persist a clip with a solid read, so the trend isn't polluted by junk
     state.currentSessionId = null;
     if (report.metrics.length >= 3 && report.frameCount >= 12) {
@@ -282,8 +319,16 @@ async function loadClipForReview(blobOrFile) {
   } catch (e) {
     console.error(e);
     showAnalyzing(false);
-    toast("Something went wrong reading that clip. Try a shorter, side-on clip in good light.");
+    toast("Something went wrong reading that clip. Try a shorter clip in good light.");
+    backToShootLive();
   }
+}
+
+// return to a live, retryable Shoot screen after a failed/rejected analysis
+function backToShootLive() {
+  if (!state.stream) return;
+  el.liveHud.hidden = false;
+  startLiveTracking();
 }
 
 function showAnalyzing(on, text) {
@@ -456,7 +501,7 @@ function drawSkeleton(canvas, video, lm, fit, hand) {
   ctx.clearRect(0, 0, cw, ch);
   if (!lm) return;
   const { dw, dh, ox, oy } = contentRect(video, cw, ch, fit);
-  const P = (i) => (lm[i] && (lm[i].v == null || lm[i].v >= 0.4)) ? { x: ox + lm[i].x * dw, y: oy + lm[i].y * dh } : null;
+  const P = (i) => { const p = lm[i]; const v = p && (p.v != null ? p.v : p.visibility); return (p && (v == null || v >= 0.4)) ? { x: ox + p.x * dw, y: oy + p.y * dh } : null; };
   const shoot = hand === "left"
     ? new Set([11, 13, 15, 19]) : new Set([12, 14, 16, 20]);
 
@@ -636,7 +681,8 @@ el.setCoach.addEventListener("change", () => {
 /* ----------------- lifecycle ----------------- */
 function teardownForBackground() {
   if (state.recording) stopRecord();
-  stopLiveLoop();
+  stopLiveTracking();
+  el.liveHud.hidden = true;
   try { window.speechSynthesis?.cancel(); } catch {}
   state.cameraWasOn = !!state.stream;     // remember to relight on return
   stopStream();
@@ -646,7 +692,9 @@ function teardownForBackground() {
 }
 function resumeFromForeground() {
   const onShoot = !$('[data-view="shoot"]').hidden;
-  if (state.cameraWasOn && onShoot) startStream().then(ok => { if (ok) warmPose(); });
+  if (state.cameraWasOn && onShoot) startStream().then(async ok => {
+    if (ok) { el.liveHud.hidden = false; setLiveStatus("searching", "loading coach…"); await warmPose(); startLiveTracking(); }
+  });
   state.cameraWasOn = false;
 }
 document.addEventListener("visibilitychange", () => {
