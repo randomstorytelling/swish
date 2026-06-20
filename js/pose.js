@@ -77,12 +77,17 @@ export function detectVideo(video, tsMs) {
 // Run pose over an entire recorded video, frame by frame.
 // Returns [{ t, lm:[{x,y,z,visibility}], world:[{x,y,z}] }, ...]
 // onProgress(0..1) for the UI bar.
-export async function analyzeClip(video, { fps = 30, onProgress } = {}) {
+export async function analyzeClip(video, { fps = 30, onProgress, from = 0, to = null } = {}) {
   await initPose({ runningMode: "VIDEO", model: curModel || "full" });
   resetClock();                               // fresh ~33ms deltas for this clip, untainted by the live loop
   const frames = [];
   const duration = video.duration;
   if (!isFinite(duration) || duration <= 0) throw new Error("Clip has no duration");
+
+  // optional window — analyze only around the detected shot (keeps long clips fast)
+  const start = Math.max(0, from);
+  const end = (to != null && to > start) ? Math.min(to, duration) : duration;
+  const span = (end - start) || 1;
 
   const step = 1 / fps;
 
@@ -101,7 +106,7 @@ export async function analyzeClip(video, { fps = 30, onProgress } = {}) {
   });
 
   video.pause();
-  for (let t = 0; t <= duration; t += step) {
+  for (let t = start; t <= end; t += step) {
     await seekTo(t);
     const tsMs = safeTs(Math.round(video.currentTime * 1000));
 
@@ -115,7 +120,7 @@ export async function analyzeClip(video, { fps = 30, onProgress } = {}) {
       lm: lm ? lm.map(p => ({ x: p.x, y: p.y, z: p.z, v: p.visibility })) : null,
       world: world ? world.map(p => ({ x: p.x, y: p.y, z: p.z })) : null,
     });
-    if (onProgress) onProgress(Math.min(1, t / duration));
+    if (onProgress) onProgress(Math.min(1, (t - start) / span));
   }
   if (onProgress) onProgress(1);
   return frames;

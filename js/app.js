@@ -183,8 +183,39 @@ function startLiveTracking() {
     if (state.poseWarm) { try { lm = pose.detectVideo(el.camFeed, now)?.landmarks?.[0] || null; } catch {} }
     drawSkeleton(el.overlay, el.camFeed, lm, "cover", state.liveHand);
     if (!state.recording) updateFraming(lm);
+    else if (lm) feedShotDetector(lm);
   };
   state.liveRAF = requestAnimationFrame(loop);
+}
+
+// Real-time shot detector: watches the shooting wrist go from loaded (below the
+// shoulder) up past the head (release), then come back down → registers the shot
+// and stops recording after a short follow-through tail.
+function feedShotDetector(lm) {
+  if (state.shotCaught || !state.shotDet) return;
+  const sd = state.shotDet;
+  const hand = state.liveHand || "right";
+  const wi = hand === "left" ? 15 : 16, si = hand === "left" ? 11 : 12;
+  const w = lm[wi], s = lm[si], nose = lm[0];
+  const okv = (p) => p && (p.visibility == null || p.visibility >= 0.5);
+  if (!okv(w) || !okv(s)) return;
+  if (w.y > s.y + 0.04) sd.wasLow = true;                  // wrist loaded below the shoulder
+  const headY = okv(nose) ? nose.y : s.y - 0.12;
+  const now = performance.now();
+  if (sd.phase === "watch") {
+    if (sd.wasLow && w.y < headY) {                        // came up over the head = release
+      sd.phase = "up"; sd.peakT = now; sd.peakY = w.y;
+      el.poseStatus.textContent = "got your shot ✓";
+    }
+  } else if (sd.phase === "up") {
+    if (w.y < sd.peakY) sd.peakY = w.y;
+    if (w.y > s.y || now - sd.peakT > 900) {              // hand back down, or a beat after the peak
+      state.shotCaught = true;
+      const offset = (sd.peakT - state.recordStartT) / 1000;
+      state.shotWindow = { from: Math.max(0, offset - 1.7), to: offset + 1.1 };  // just the shot
+      setTimeout(() => { if (state.recording) stopRecord(); }, 350);            // tail for follow-through
+    }
+  }
 }
 function stopLiveTracking() {
   if (state.liveRAF) cancelAnimationFrame(state.liveRAF);
@@ -238,17 +269,24 @@ async function toggleRecord() {
   }
 
   state.recording = true;
+  state.shotCaught = false;
+  state.shotWindow = null;
+  state.shotDet = { phase: "watch", wasLow: false, peakT: 0, peakY: 1 };
   el.recordBtn.classList.add("recording");
   el.liveHud.hidden = true;            // recHud takes over while recording
   el.recHud.hidden = false;
-  el.poseStatus.textContent = "recording…";
+  el.poseStatus.textContent = "watching for your shot…";
   startLiveTracking();                 // ensure the skeleton keeps drawing (idempotent)
   const t0 = performance.now();
+  state.recordStartT = t0;
   el.recTimer.textContent = "0.0s";
   state.recTimer = setInterval(() => {
     const s = (performance.now() - t0) / 1000;
     el.recTimer.textContent = s.toFixed(1) + "s";
-    if (s >= 12) stopRecord();         // safety auto-stop
+    if (s >= 30) {                      // hard safety cap if no shot is ever detected
+      if (!state.shotCaught) toast("Didn't catch a shot — make sure I can see you, then try again.", 3800);
+      stopRecord();
+    }
   }, 100);
 }
 
@@ -280,6 +318,8 @@ el.fileInput.addEventListener("change", () => {
 async function loadClipForReview(blobOrFile) {
   stopLiveTracking();                  // free the landmarker for the clip analysis
   el.liveHud.hidden = true;
+  const win = state.shotWindow; state.shotWindow = null;   // analyze just the detected shot, if any
+  state.reviewWindow = win || null;
   if (state.reviewURL) { URL.revokeObjectURL(state.reviewURL); state.reviewURL = null; }
   state.reviewURL = URL.createObjectURL(blobOrFile);
   el.reviewVideo.muted = true; el.reviewVideo.playsInline = true;
@@ -296,7 +336,7 @@ async function loadClipForReview(blobOrFile) {
     await pose.initPose({ runningMode: "VIDEO", model: state.settings.model });
     state.poseWarm = true;
     const frames = await pose.analyzeClip(el.reviewVideo, {
-      fps: 30,
+      fps: 30, from: win?.from ?? 0, to: win?.to ?? null,
       onProgress: (p) => setAnalyzeProgress(p),
     });
     el.reviewVideo.currentTime = 0;
@@ -389,8 +429,8 @@ function renderAnalysis(report) {
   if (state.currentSessionId) { el.saveSessionBtn.textContent = "Saved to history ✓"; el.saveSessionBtn.disabled = true; }
   else { el.saveSessionBtn.textContent = "Save to history"; el.saveSessionBtn.disabled = false; }
 
-  // first skeleton frame
-  seekReview(0);
+  // first skeleton frame (start of the focused shot window)
+  seekReview(reviewBounds().from);
 }
 
 function metricEl(m) {
@@ -420,6 +460,14 @@ function nearestFrame(t) {
   for (const f of state.frames) { const d = Math.abs(f.t - t); if (d < bd) { bd = d; best = f; } }
   return best;
 }
+function reviewBounds() {
+  const dur = el.reviewVideo.duration || 1;
+  const w = state.reviewWindow;
+  let from = w ? Math.max(0, w.from) : 0;
+  let to = w ? Math.min(dur, w.to) : dur;
+  if (!(to > from)) { from = 0; to = dur; }
+  return { from, to };
+}
 function seekReview(t) {
   if (!isFinite(t)) t = 0;
   el.reviewVideo.currentTime = t;
@@ -435,16 +483,16 @@ function drawReviewAt(t) {
     names.forEach(([, tt], i) => { const d = Math.abs((tt ?? 0) - t); if (d < bd) { bd = d; active = i; } });
     $$(".phase-chip", el.phaseChips).forEach((c, i) => c.classList.toggle("active", i === active));
   }
-  // scrubber position
-  const dur = el.reviewVideo.duration || 1;
-  el.scrubber.value = Math.round((t / dur) * 1000);
+  // scrubber position (mapped to the focused shot window if one is set)
+  const { from, to } = reviewBounds();
+  el.scrubber.value = Math.round(((t - from) / ((to - from) || 1)) * 1000);
 }
 el.reviewVideo.addEventListener("seeked", () => drawReviewAt(el.reviewVideo.currentTime));
 el.reviewVideo.addEventListener("timeupdate", () => { if (!el.reviewVideo.paused) drawReviewAt(el.reviewVideo.currentTime); });
 el.scrubber.addEventListener("input", () => {
   el.reviewVideo.pause();
-  const dur = el.reviewVideo.duration || 1;
-  seekReview((el.scrubber.value / 1000) * dur);
+  const { from, to } = reviewBounds();
+  seekReview(from + (el.scrubber.value / 1000) * (to - from));
 });
 el.playBtn.addEventListener("click", () => {
   if (el.reviewVideo.paused) { el.reviewVideo.play(); el.playBtn.textContent = "❚❚"; driveReview(); }
