@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0d0f14" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Swish" />
+<title>Swish — AI Shooting Coach</title>
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="icons/icon.svg" />
+<link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+
+<!-- ===================== APP SHELL ===================== -->
+<div id="app">
+
+  <!-- Top bar -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true"></span>
+      <span class="brand-name">Swish</span>
+    </div>
+    <button id="settingsBtn" class="icon-btn" aria-label="Settings">
+      <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8m8.94 4a7 7 0 0 0-.13-1.32l2.11-1.65-2-3.46-2.49 1a7 7 0 0 0-2.28-1.32L15.5 2h-4l-.55 2.93a7 7 0 0 0-2.28 1.32l-2.49-1-2 3.46 2.11 1.65a7 7 0 0 0 0 2.64L1.69 14.6l2 3.46 2.49-1a7 7 0 0 0 2.28 1.32L9 21.5h4l.55-3.12a7 7 0 0 0 2.28-1.32l2.49 1 2-3.46-2.11-1.65c.08-.43.13-.87.13-1.32"/></svg>
+    </button>
+  </header>
+
+  <!-- ===================== SHOOT TAB ===================== -->
+  <section class="view" id="view-shoot" data-view="shoot">
+    <div class="camera-stage">
+      <video id="camFeed" playsinline muted autoplay></video>
+      <canvas id="overlay"></canvas>
+
+      <!-- camera not ready / permission state -->
+      <div class="cam-placeholder" id="camPlaceholder">
+        <div class="ball-spin"></div>
+        <h2>Let's get your shot on film</h2>
+        <p class="muted">Prop your phone so your <strong>whole body and the rim</strong> are in frame — side-on or 45° is best. Then hit record and take your shots.</p>
+        <button class="btn primary big" id="enableCamBtn">Turn on camera</button>
+        <p class="tiny muted">Everything is processed on your phone. Nothing is uploaded.</p>
+      </div>
+
+      <!-- live HUD while recording -->
+      <div class="rec-hud" id="recHud" hidden>
+        <span class="rec-dot"></span>
+        <span id="recTimer">0.0s</span>
+        <span class="hud-sep">•</span>
+        <span id="poseStatus">finding you…</span>
+      </div>
+
+      <!-- framing guide -->
+      <div class="frame-guide" id="frameGuide" hidden></div>
+    </div>
+
+    <div class="shoot-controls" id="shootControls" hidden>
+      <button class="flip-btn" id="flipCamBtn" aria-label="Flip camera">
+        <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M20 5h-3.17l-1.24-1.35A2 2 0 0 0 14.12 3H9.88a2 2 0 0 0-1.47.65L7.17 5H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2m-8 3a5 5 0 0 1 4.9 4H15l2.5 3L20 12h-1.07A7 7 0 0 0 7.4 8.6l1.45 1.45A5 5 0 0 1 12 8m0 8a5 5 0 0 1-4.9-4H9l-2.5-3L4 12h1.07A7 7 0 0 0 16.6 15.4l-1.45-1.45A5 5 0 0 1 12 16"/></svg>
+      </button>
+
+      <button class="record-btn" id="recordBtn" aria-label="Record">
+        <span class="record-ring"></span>
+        <span class="record-core"></span>
+      </button>
+
+      <button class="flip-btn" id="uploadBtn" aria-label="Upload a clip">
+        <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M12 2 8 6h3v8h2V6h3zm-7 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-9h-2v9H7v-9z"/></svg>
+        <input type="file" id="fileInput" accept="video/*" hidden />
+      </button>
+    </div>
+
+    <div class="analyzing-bar" id="analyzingBar" hidden>
+      <div class="analyzing-fill" id="analyzingFill"></div>
+      <span id="analyzingText">Reading your shot…</span>
+    </div>
+  </section>
+
+  <!-- ===================== ANALYSIS TAB ===================== -->
+  <section class="view" id="view-analysis" data-view="analysis" hidden>
+    <div class="empty-state" id="analysisEmpty">
+      <div class="empty-icon">🎯</div>
+      <h2>No shot analyzed yet</h2>
+      <p class="muted">Record a shot on the Shoot tab and your full breakdown shows up here.</p>
+      <button class="btn primary" data-goto="shoot">Go shoot</button>
+    </div>
+
+    <div id="analysisContent" hidden>
+      <!-- score header -->
+      <div class="score-hero">
+        <div class="score-ring" id="scoreRing">
+          <svg viewBox="0 0 120 120">
+            <circle class="ring-bg" cx="60" cy="60" r="52"/>
+            <circle class="ring-fg" id="ringFg" cx="60" cy="60" r="52"/>
+          </svg>
+          <div class="score-num"><span id="scoreVal">--</span><small>/100</small></div>
+        </div>
+        <div class="score-meta">
+          <h2 id="scoreGrade">Form Score</h2>
+          <p class="muted" id="scoreSummary">—</p>
+        </div>
+      </div>
+
+      <!-- video scrubber with skeleton -->
+      <div class="player-wrap">
+        <div class="player-stage">
+          <video id="reviewVideo" playsinline muted></video>
+          <canvas id="reviewOverlay"></canvas>
+        </div>
+        <div class="phase-chips" id="phaseChips"></div>
+        <div class="scrub-row">
+          <button class="mini-btn" id="playBtn" aria-label="Play">▶</button>
+          <input type="range" id="scrubber" min="0" max="1000" value="0" />
+          <button class="mini-btn" id="slowBtn" aria-label="Slow motion">0.25x</button>
+        </div>
+      </div>
+
+      <!-- top fixes -->
+      <div class="section-head"><h3>Your coach says</h3></div>
+      <div class="coach-card" id="coachCard">
+        <div class="coach-avatar">C</div>
+        <p id="coachText" class="coach-text">—</p>
+      </div>
+
+      <!-- metric breakdown -->
+      <div class="section-head"><h3>Mechanics breakdown</h3></div>
+      <div class="metrics" id="metricsList"></div>
+
+      <div class="analysis-actions">
+        <button class="btn ghost" id="saveSessionBtn">Save to history</button>
+        <button class="btn primary" data-goto="shoot">Shoot again</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== DRILLS TAB ===================== -->
+  <section class="view" id="view-drills" data-view="drills" hidden>
+    <div class="view-head">
+      <h2>Drills</h2>
+      <p class="muted">A path from form to game-speed. Tap one, then film a rep and I'll check it.</p>
+    </div>
+    <div class="drill-list" id="drillList"></div>
+  </section>
+
+  <!-- ===================== PROGRESS TAB ===================== -->
+  <section class="view" id="view-progress" data-view="progress" hidden>
+    <div class="view-head">
+      <h2>Progress</h2>
+      <p class="muted" id="progressSub">Your shot, tracked over time.</p>
+    </div>
+    <div class="stat-row" id="statRow"></div>
+    <div class="chart-card">
+      <h3>Form score</h3>
+      <canvas id="trendChart" height="160"></canvas>
+    </div>
+    <div class="section-head"><h3>History</h3></div>
+    <div class="history-list" id="historyList"></div>
+  </section>
+
+  <!-- ===================== BOTTOM NAV ===================== -->
+  <nav class="tabbar">
+    <button class="tab active" data-view="shoot">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 12h18M12 3v18M5.6 5.6 18.4 18.4M18.4 5.6 5.6 18.4" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+      <span>Shoot</span>
+    </button>
+    <button class="tab" data-view="analysis">
+      <svg viewBox="0 0 24 24"><path d="M4 19V5m0 14h16M8 16V9m4 7V6m4 10v-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>Analysis</span>
+    </button>
+    <button class="tab" data-view="drills">
+      <svg viewBox="0 0 24 24"><path d="M5 12h14M5 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0m18 0a2 2 0 1 1-4 0 2 2 0 0 1 4 0M9 8v8m6-8v8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>Drills</span>
+    </button>
+    <button class="tab" data-view="progress">
+      <svg viewBox="0 0 24 24"><path d="M4 20V10m5 10V4m5 16v-7m5 7V8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>Progress</span>
+    </button>
+  </nav>
+
+  <!-- ===================== SETTINGS SHEET ===================== -->
+  <div class="sheet-backdrop" id="settingsSheet" hidden>
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <h2>Settings</h2>
+
+      <label class="field column">
+        <span>Your coach</span>
+        <select id="setCoach"></select>
+        <small class="muted tiny" id="coachBlurb"></small>
+      </label>
+
+      <label class="field">
+        <span>Shooting hand</span>
+        <select id="setHand">
+          <option value="auto">Auto-detect</option>
+          <option value="right">Right</option>
+          <option value="left">Left</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Camera angle</span>
+        <select id="setAngle">
+          <option value="side">Side-on (best for arc)</option>
+          <option value="front">Front-on (best for elbow)</option>
+          <option value="45">45° angle</option>
+        </select>
+      </label>
+
+      <label class="field toggle">
+        <span>Voice cues</span>
+        <input type="checkbox" id="setVoice" checked />
+      </label>
+
+      <label class="field toggle">
+        <span>Live skeleton while recording</span>
+        <input type="checkbox" id="setLiveSkel" checked />
+      </label>
+
+      <label class="field">
+        <span>Model quality</span>
+        <select id="setModel">
+          <option value="full">Balanced (recommended)</option>
+          <option value="lite">Fast (older phones)</option>
+          <option value="heavy">Most accurate (newer phones)</option>
+        </select>
+      </label>
+
+      <div class="settings-foot">
+        <p class="tiny muted">Swish runs entirely on your device. Your video never leaves your phone.</p>
+        <button class="btn ghost" id="closeSettings">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- toast -->
+  <div id="toast" class="toast" hidden></div>
+</div>
+
+<script type="module" src="js/app.js"></script>
+<script>
+  // Register the offline service worker in production only — skip on localhost so
+  // dev edits to CSS/JS aren't served from a stale cache.
+  const isLocal = ['localhost','127.0.0.1','0.0.0.0'].includes(location.hostname);
+  if ('serviceWorker' in navigator && !isLocal) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
+  }
+</script>
+</body>
+</html>

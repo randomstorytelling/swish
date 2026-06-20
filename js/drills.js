@@ -1,0 +1,60 @@
+// drills.js — the 7-stage shooting-development curriculum (research-built).
+export const STAGES = [
+  { n: 1, title: "Groove the stroke", blurb: "Arc, backspin, held follow-through. Zero distance noise." },
+  { n: 2, title: "One-hand truth", blurb: "Isolate the shooting hand. Kill guide-hand interference." },
+  { n: 3, title: "Spots & consistency", blurb: "Identical mechanics from every spot." },
+  { n: 4, title: "Catch & shoot", blurb: "Footwork into a quick, balanced set point." },
+  { n: 5, title: "Off the dribble", blurb: "Pull-ups and step-backs into the same shot." },
+  { n: 6, title: "Free throws & routine", blurb: "A fixed routine and quiet eye under pressure." },
+  { n: 7, title: "Game speed", blurb: "Random, fatigued, on a clock. Make it transfer." },
+];
+
+export const DRILLS = [
+  { id: "cookie-jar", emoji: "🍪", name: "Cookie-Jar Form Shots", stage: 1, level: "beginner",
+    reps: "5 × 10 from 3–5 ft", watch: "Release above the forehead, gooseneck hold, arc apex over the rim.",
+    purpose: "Groove arc, backspin and a full held follow-through with no distance to fight." },
+  { id: "swish-only", emoji: "💧", name: "Swish-Only Challenge", stage: 1, level: "beginner",
+    reps: "Count consecutive swishes to 5 ×3", watch: "Soft touch — any rim contact resets the streak.",
+    purpose: "Force arc and touch. Outcome feedback only." },
+  { id: "one-hand", emoji: "✋", name: "One-Hand Form Shots", stage: 2, level: "beginner",
+    reps: "4 × 10, guide hand on hip", watch: "Ball direction off the hand (left/right), elbow under the ball.",
+    purpose: "Expose the #1 cause of L/R misses — guide-hand interference." },
+  { id: "guide-off", emoji: "👋", name: "Guide-Hand-Off Pop", stage: 2, level: "beginner",
+    reps: "3 × 10", watch: "Any thumb-flick or rotation from the off-hand at release.",
+    purpose: "Teach the guide hand to be a passenger that leaves clean." },
+  { id: "five-spot", emoji: "⭐", name: "Five-Spot Shooting", stage: 3, level: "intermediate",
+    reps: "5 spots × 10 = 50", watch: "Per-spot make %, form-score variance across spots, squared feet.",
+    purpose: "Identical mechanics from 2 corners, 2 wings and the top." },
+  { id: "3-row", emoji: "🎯", name: "3-in-a-Row", stage: 3, level: "intermediate",
+    reps: "3 straight per spot, all 5 spots", watch: "Form breakdown as fatigue builds.",
+    purpose: "Make under mild pressure. Count total attempts — lower is better." },
+  { id: "closeout-cs", emoji: "🏃", name: "Closeout Catch-and-Shoot", stage: 4, level: "intermediate",
+    reps: "5 spots × 8", watch: "Feet set on the catch, hands in the pocket, catch-to-release time.",
+    purpose: "Footwork into a quick, balanced set point off the catch." },
+  { id: "sprint-elbow", emoji: "💨", name: "Sprint-to-Catch Elbow Shot", stage: 4, level: "intermediate",
+    reps: "2 × 10", watch: "Balance on the gather, consistent set point despite fatigue.",
+    purpose: "Shoot with an elevated heart rate and momentum killed into balance." },
+  { id: "one-dribble", emoji: "⛹️", name: "One-Dribble Pull-Up", stage: 5, level: "advanced",
+    reps: "Both directions × 5 spots × 6", watch: "Gather→set-point vs your catch-and-shoot baseline, vertical landing.",
+    purpose: "Gather a live dribble into the same set point as your catch-and-shoot." },
+  { id: "step-back", emoji: "↩️", name: "Step-Back Series", stage: 5, level: "advanced",
+    reps: "3 × 8 each direction", watch: "Balanced landing (no unintended fade), feet set before release.",
+    purpose: "Create space, land balanced, shoot straight while moving back." },
+  { id: "routine-ft", emoji: "🧘", name: "Routine Free Throws (Quiet-Eye)", stage: 6, level: "intermediate",
+    reps: "5 × 10, interleaved", watch: "Routine-timing consistency, ~1s still rim fixation, make %.",
+    purpose: "Build a fixed routine + a quiet-eye gaze before you rise." },
+  { id: "pressure-ft", emoji: "🔥", name: "Pressure Free Throws", stage: 6, level: "advanced",
+    reps: "1-and-1 / make-2-or-run", watch: "Does the routine compress under pressure — the choke signature?",
+    purpose: "Protect the routine under load." },
+  { id: "gauntlet", emoji: "🎲", name: "Random 5-Spot Gauntlet", stage: 7, level: "advanced",
+    reps: "25 called shots, scored", watch: "Make % under randomization, form retention vs blocked baseline.",
+    purpose: "Never the same shot twice — the app calls spot + type on a clock." },
+  { id: "beat-clock", emoji: "⏱️", name: "Beat-the-Clock Shooting", stage: 7, level: "advanced",
+    reps: "60–90s windows, hit a quota", watch: "Form decay across the window, release time, make rate vs fresh.",
+    purpose: "Shoot fatigued, on a clock, score-driven." },
+];
+
+export function drillsByStage() {
+  return STAGES.map(s => ({ ...s, drills: DRILLS.filter(d => d.stage === s.n) }));
+}
+export function getDrill(id) { return DRILLS.find(d => d.id === id) || null; }

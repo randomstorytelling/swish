@@ -1,0 +1,15 @@
+{
+  "name": "Swish — AI Shooting Coach",
+  "short_name": "Swish",
+  "description": "Film your jumper and get an elite shooting coach in your pocket. On-device form analysis, real fixes, and a drill curriculum that builds a pure stroke.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0d0f14",
+  "theme_color": "#0d0f14",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
